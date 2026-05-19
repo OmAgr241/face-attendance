@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Database
+*.db
+
+# Node.js
+node_modules/
+dist/
+build/
+build_output.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Storage (face encodings - may contain large binary data)
+backend/storage/
+
+# Logs
+*.log
