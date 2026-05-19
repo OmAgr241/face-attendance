@@ -24,7 +24,7 @@ export default function AttendanceTable({ records, showStudent = true }) {
               {showStudent && <th>Roll No.</th>}
               <th>Date</th>
               <th>Time</th>
-              <th>Confidence</th>
+              <th>Match %</th>
               <th>Status</th>
               <th>Proof</th>
             </tr>

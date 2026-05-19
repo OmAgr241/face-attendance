@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import AttendanceTable from '../components/AttendanceTable';
-import { Zap, Plus, Clock, Activity, Thermometer, Gauge, Settings, ChevronRight } from 'lucide-react';
+import { Zap, Plus, Clock, Activity, Users, TrendingUp, Calendar, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -39,7 +39,9 @@ export default function Dashboard() {
 
   const totalProfiles = stats?.total_students || 0;
   const presentToday = stats?.present_today || 0;
-  const overallHealth = stats?.overall_percentage || 98;
+  const attendanceRate = stats?.overall_percentage || 0;
+  const absentToday = totalProfiles - presentToday;
+  const todayDate = stats?.date || new Date().toISOString().split('T')[0];
 
   return (
     <div className="dashboard-container page-enter">
@@ -56,14 +58,14 @@ export default function Dashboard() {
           <div className="stat-label">PRESENT TODAY</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon"><Gauge size={20} /></div>
-          <div className="stat-value">{overallHealth}%</div>
-          <div className="stat-label">OVERALL HEALTH</div>
+          <div className="stat-icon"><TrendingUp size={20} /></div>
+          <div className="stat-value">{attendanceRate}%</div>
+          <div className="stat-label">ATTENDANCE RATE</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon"><Clock size={20} /></div>
-          <div className="stat-value">12H</div>
-          <div className="stat-label">UPTIME</div>
+          <div className="stat-icon"><Users size={20} /></div>
+          <div className="stat-value">{absentToday}</div>
+          <div className="stat-label">ABSENT TODAY</div>
         </div>
       </div>
 
@@ -92,7 +94,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* System Details */}
+      {/* Today's Summary */}
       <div className="glass-card mb-lg">
         <h2 style={{
           fontSize: 'var(--font-xl)',
@@ -102,35 +104,35 @@ export default function Dashboard() {
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           marginBottom: 'var(--space-lg)'
-        }}>SYSTEM DETAILS</h2>
+        }}>TODAY'S SUMMARY</h2>
         <div className="details-grid">
           <div className="detail-box">
             <div className="detail-meta">
-              <span className="detail-lbl">Mode</span>
-              <span className="detail-val">ACTIVE</span>
+              <span className="detail-lbl">Date</span>
+              <span className="detail-val">{todayDate}</span>
             </div>
-            <Zap size={16} color="#ffffff" />
+            <Calendar size={16} color="#ffffff" />
           </div>
           <div className="detail-box">
             <div className="detail-meta">
-              <span className="detail-lbl">Uptime</span>
-              <span className="detail-val">12H 0M</span>
+              <span className="detail-lbl">Present</span>
+              <span className="detail-val">{presentToday} / {totalProfiles}</span>
             </div>
-            <Clock size={16} color="#ffffff" />
+            <Users size={16} color="#ffffff" />
           </div>
           <div className="detail-box">
             <div className="detail-meta">
-              <span className="detail-lbl">AI Confidence</span>
-              <span className="detail-val">99.4%</span>
+              <span className="detail-lbl">Attendance Rate</span>
+              <span className="detail-val">{attendanceRate}%</span>
+            </div>
+            <TrendingUp size={16} color="#ffffff" />
+          </div>
+          <div className="detail-box">
+            <div className="detail-meta">
+              <span className="detail-lbl">Absent</span>
+              <span className="detail-val">{absentToday}</span>
             </div>
             <Activity size={16} color="#ffffff" />
-          </div>
-          <div className="detail-box">
-            <div className="detail-meta">
-              <span className="detail-lbl">Temperature</span>
-              <span className="detail-val">30°C</span>
-            </div>
-            <Thermometer size={16} color="#ffffff" />
           </div>
         </div>
       </div>

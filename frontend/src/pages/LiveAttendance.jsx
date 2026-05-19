@@ -102,7 +102,7 @@ export default function LiveAttendance() {
           {isLoggedIn ? (
             <button className="btn btn-secondary btn-sm" onClick={() => navigate('/dashboard')}>
               <ShieldAlert size={16} />
-              COMMAND CENTER
+              DASHBOARD
             </button>
           ) : (
             <button className="btn btn-secondary btn-sm" onClick={() => navigate('/login')}>
@@ -118,7 +118,7 @@ export default function LiveAttendance() {
         <div className="glass-card mb-lg">
           <div className="flex items-center gap-lg" style={{ flexWrap: 'wrap' }}>
             <div className="form-group" style={{ marginBottom:0, minWidth: 220 }}>
-              <label>HARDWARE SOURCE</label>
+              <label>SELECT CAMERA</label>
               <select className="form-select" value={selectedCamera}
                 onChange={(e) => setSelectedCamera(Number(e.target.value))} disabled={isRunning}>
                 {cameras.length > 0 ? cameras.map((c) => (
@@ -132,35 +132,35 @@ export default function LiveAttendance() {
             <div className="flex gap-md" style={{ marginTop: '1.4rem' }}>
               {!isRunning ? (
                 <button className="btn btn-success btn-lg" onClick={handleStart} disabled={starting}>
-                  {starting ? <><div className="spinner spinner-sm" style={{ borderTopColor: 'white' }}></div> BOOTING...</> : (
+                  {starting ? <><div className="spinner spinner-sm" style={{ borderTopColor: 'white' }}></div> STARTING...</> : (
                     <>
                       <Play size={18} />
-                      INIT STREAM
+                      START CAMERA
                     </>
                   )}
                 </button>
               ) : (
                 <button className="btn btn-danger btn-lg" onClick={handleStop}>
                   <Square size={18} />
-                  HALT
+                  STOP
                 </button>
               )}
               <button className="btn btn-secondary" onClick={detectCameras} disabled={loadingCameras || isRunning}>
                 <RefreshCw size={16} />
-                SCAN
+                REFRESH
               </button>
             </div>
 
             {isRunning && (
               <div className="flex items-center gap-sm" style={{ marginTop: '1.4rem' }}>
                 <div className="live-pulse"></div>
-                <span className="text-sm" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em' }}>LIVE SCANNING</span>
+                <span className="text-sm" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em' }}>CAMERA ACTIVE</span>
               </div>
             )}
           </div>
 
           <p className="text-sm mt-md">
-            &gt; TO ROUTE MOBILE DEVICE AS HARDWARE SOURCE, BIND VIA USB (DROIDCAM / IRIUN) AND RE-SCAN.
+            &gt; To use a mobile phone as camera, connect via USB (DroidCam / Iriun) and click Refresh.
           </p>
         </div>
 
@@ -176,7 +176,7 @@ export default function LiveAttendance() {
               <div className="flex justify-between items-center mb-md">
                 <h3 style={{ fontSize: 'var(--font-lg)', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   <Terminal size={18} />
-                  OUTPUT LOG
+                  ATTENDANCE LOG
                 </h3>
                 {events.length > 0 && <span className="badge badge-primary">{events.length}</span>}
               </div>
@@ -184,7 +184,7 @@ export default function LiveAttendance() {
                 <div className="empty-state" style={{ padding: 'var(--space-xl) var(--space-lg)' }}>
                   <Terminal size={40} color="var(--border-hover)" style={{ opacity: 0.5 }} />
                   <p className="text-sm" style={{ marginTop: '0.75rem', textTransform: 'uppercase' }}>
-                    {isRunning ? '> AWAITING IDENTIFICATION...' : '> SYSTEM IDLE'}
+                    {isRunning ? 'Waiting for students...' : 'Camera is off'}
                   </p>
                 </div>
               ) : (
@@ -193,7 +193,7 @@ export default function LiveAttendance() {
                     <div key={`${evt.timestamp}-${evt.name}-${i}`} className="event-log-item">
                       <div className="event-dot"></div>
                       <span className="event-name">{evt.name}</span>
-                      <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>{(evt.confidence).toFixed(2)}</span>
+                      <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>{(evt.confidence).toFixed(1)}%</span>
                       <span className="event-time">{evt.timestamp}</span>
                     </div>
                   ))}
