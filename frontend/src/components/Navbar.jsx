@@ -14,6 +14,7 @@ export default function Navbar() {
 
     const navItems = [
       { path: '/dashboard', label: 'DASHBOARD' },
+      { path: '/analytics', label: 'ANALYTICS' },
       { path: '/students', label: 'STUDENTS' },
       { path: '/attendance', label: 'ATTENDANCE' },
       { path: '/live', label: 'LIVE ATTENDANCE' },
@@ -50,7 +51,7 @@ export default function Navbar() {
 
       {/* Right Icons */}
       <div className="navbar-actions">
-        <button className="action-btn" onClick={() => navigate('/dashboard')} title="Modules Grid">
+        <button className="action-btn" onClick={() => navigate('/analytics')} title="Analytics">
           <LayoutGrid size={18} />
         </button>
         <button className="action-btn" onClick={handleLogout} title="Terminate Session">

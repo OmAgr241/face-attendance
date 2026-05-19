@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import AttendanceTable from '../components/AttendanceTable';
-import { Zap, Plus, Clock, Activity, Users, TrendingUp, Calendar, ChevronRight } from 'lucide-react';
+import { Zap, Plus, Clock, Activity, Users, TrendingUp, BarChart3, Video, ClipboardList, UserPlus, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -39,9 +39,8 @@ export default function Dashboard() {
 
   const totalProfiles = stats?.total_students || 0;
   const presentToday = stats?.present_today || 0;
-  const attendanceRate = stats?.overall_percentage || 0;
+  const todayRate = stats?.today_percentage || 0;
   const absentToday = totalProfiles - presentToday;
-  const todayDate = stats?.date || new Date().toISOString().split('T')[0];
 
   return (
     <div className="dashboard-container page-enter">
@@ -53,86 +52,75 @@ export default function Dashboard() {
           <div className="stat-label">TOTAL STUDENTS</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon"><Activity size={20} /></div>
+          <div className="stat-icon" style={{ background: 'var(--success-light)', color: 'var(--success)' }}><Activity size={20} /></div>
           <div className="stat-value">{presentToday}</div>
           <div className="stat-label">PRESENT TODAY</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon"><TrendingUp size={20} /></div>
-          <div className="stat-value">{attendanceRate}%</div>
-          <div className="stat-label">ATTENDANCE RATE</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><Users size={20} /></div>
+          <div className="stat-icon" style={{ background: 'var(--danger-light)', color: 'var(--danger)' }}><Users size={20} /></div>
           <div className="stat-value">{absentToday}</div>
           <div className="stat-label">ABSENT TODAY</div>
         </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="glass-card mb-lg">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <h2 style={{
-            fontSize: 'var(--font-xl)',
-            fontWeight: 700,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-primary)',
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase'
-          }}>QUICK ACTIONS</h2>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={() => navigate('/students/new')}>
-              <Plus size={16} /> ADD STUDENT
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/live')}>
-               <Activity size={16} /> LIVE ATTENDANCE
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/attendance')}>
-              <Clock size={16} /> VIEW LOGS
-            </button>
-          </div>
+        <div className="stat-card">
+          <div className="stat-icon"><TrendingUp size={20} /></div>
+          <div className="stat-value">{todayRate}%</div>
+          <div className="stat-label">TODAY'S RATE</div>
         </div>
       </div>
 
-      {/* Today's Summary */}
+      {/* Modules Grid */}
       <div className="glass-card mb-lg">
-        <h2 style={{
-          fontSize: 'var(--font-xl)',
-          fontWeight: 700,
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-primary)',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          marginBottom: 'var(--space-lg)'
-        }}>TODAY'S SUMMARY</h2>
-        <div className="details-grid">
-          <div className="detail-box">
-            <div className="detail-meta">
-              <span className="detail-lbl">Date</span>
-              <span className="detail-val">{todayDate}</span>
+        <h2 className="section-title">MODULES</h2>
+        <div className="modules-grid">
+          <div className="module-card" onClick={() => navigate('/analytics')}>
+            <div className="module-icon" style={{ background: 'linear-gradient(135deg, #ff5722, #ff7a00)' }}>
+              <BarChart3 size={24} color="#fff" />
             </div>
-            <Calendar size={16} color="#ffffff" />
+            <div className="module-info">
+              <span className="module-name">Analytics</span>
+              <span className="module-desc">Charts, trends & reports</span>
+            </div>
+            <ChevronRight size={18} className="module-arrow" />
           </div>
-          <div className="detail-box">
-            <div className="detail-meta">
-              <span className="detail-lbl">Present</span>
-              <span className="detail-val">{presentToday} / {totalProfiles}</span>
+          <div className="module-card" onClick={() => navigate('/students')}>
+            <div className="module-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
+              <Users size={24} color="#fff" />
             </div>
-            <Users size={16} color="#ffffff" />
+            <div className="module-info">
+              <span className="module-name">Students</span>
+              <span className="module-desc">Manage student profiles</span>
+            </div>
+            <ChevronRight size={18} className="module-arrow" />
           </div>
-          <div className="detail-box">
-            <div className="detail-meta">
-              <span className="detail-lbl">Attendance Rate</span>
-              <span className="detail-val">{attendanceRate}%</span>
+          <div className="module-card" onClick={() => navigate('/attendance')}>
+            <div className="module-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+              <ClipboardList size={24} color="#fff" />
             </div>
-            <TrendingUp size={16} color="#ffffff" />
+            <div className="module-info">
+              <span className="module-name">Attendance Logs</span>
+              <span className="module-desc">View & filter records</span>
+            </div>
+            <ChevronRight size={18} className="module-arrow" />
           </div>
-          <div className="detail-box">
-            <div className="detail-meta">
-              <span className="detail-lbl">Absent</span>
-              <span className="detail-val">{absentToday}</span>
+          <div className="module-card" onClick={() => navigate('/live')}>
+            <div className="module-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
+              <Video size={24} color="#fff" />
             </div>
-            <Activity size={16} color="#ffffff" />
+            <div className="module-info">
+              <span className="module-name">Live Camera</span>
+              <span className="module-desc">Real-time face detection</span>
+            </div>
+            <ChevronRight size={18} className="module-arrow" />
+          </div>
+          <div className="module-card" onClick={() => navigate('/students/new')}>
+            <div className="module-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+              <UserPlus size={24} color="#fff" />
+            </div>
+            <div className="module-info">
+              <span className="module-name">Register Student</span>
+              <span className="module-desc">Add new student & faces</span>
+            </div>
+            <ChevronRight size={18} className="module-arrow" />
           </div>
         </div>
       </div>
@@ -140,14 +128,7 @@ export default function Dashboard() {
       {/* Today's Logs */}
       <div className="glass-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)' }}>
-          <h2 style={{
-            fontSize: 'var(--font-xl)',
-            fontWeight: 700,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-primary)',
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase'
-          }}>
+          <h2 className="section-title" style={{ marginBottom: 0 }}>
             TODAY'S LOGS
           </h2>
           <span style={{
@@ -175,60 +156,88 @@ export default function Dashboard() {
           width: 100%;
         }
 
-        .details-grid {
+        .section-title {
+          font-size: var(--font-xl);
+          font-weight: 700;
+          font-family: var(--font-mono);
+          color: var(--text-primary);
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-bottom: var(--space-lg);
+        }
+
+        .modules-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
           gap: 1rem;
         }
 
-        .detail-box {
+        .module-card {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          gap: 1rem;
+          padding: 1rem 1.25rem;
           background: var(--bg-input);
-          padding: 0.75rem 1rem;
-          border-radius: var(--radius-md);
           border: 1px solid var(--border);
-          transition: all var(--transition-fast);
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: all var(--transition-base);
         }
 
-        .detail-box:hover {
+        .module-card:hover {
           border-color: var(--primary);
           background: var(--bg-input-focus);
+          transform: translateX(4px);
+          box-shadow: 0 4px 16px rgba(255, 87, 34, 0.1);
         }
 
-        .detail-meta {
+        .module-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .module-info {
+          flex: 1;
           display: flex;
           flex-direction: column;
         }
 
-        .detail-lbl {
-          font-size: 0.7rem;
-          color: var(--text-muted);
+        .module-name {
           font-family: var(--font-mono);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
+          font-weight: 700;
+          font-size: var(--font-base);
+          color: var(--text-primary);
+          letter-spacing: 0.03em;
         }
 
-        .detail-val {
-          font-size: 0.9rem;
-          color: var(--text-primary);
-          font-weight: 700;
-          font-family: var(--font-mono);
+        .module-desc {
+          font-size: var(--font-sm);
+          color: var(--text-muted);
+          margin-top: 0.1rem;
+        }
+
+        .module-arrow {
+          color: var(--text-muted);
+          flex-shrink: 0;
+          transition: all var(--transition-fast);
+        }
+
+        .module-card:hover .module-arrow {
+          color: var(--primary);
+          transform: translateX(4px);
         }
 
         .mb-lg {
           margin-bottom: var(--space-lg);
         }
 
-        @media (max-width: 1024px) {
-          .details-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-        }
-
         @media (max-width: 640px) {
-          .details-grid {
+          .modules-grid {
             grid-template-columns: 1fr;
           }
         }

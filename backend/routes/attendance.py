@@ -1,8 +1,11 @@
 # --- Attendance Routes ---
-# GET endpoints for attendance records, today's list, and stats.
+# GET endpoints for attendance records, today's list, stats, and analytics.
 
 from flask import Blueprint, request, jsonify
-from models.attendance import get_attendance_records, get_today_attendance, get_attendance_stats
+from models.attendance import (
+    get_attendance_records, get_today_attendance,
+    get_attendance_stats, get_analytics_data
+)
 from routes.auth import auth_required
 
 attendance_bp = Blueprint('attendance', __name__)
@@ -37,3 +40,16 @@ def today_attendance():
 def attendance_stats():
     stats = get_attendance_stats()
     return jsonify(stats), 200
+
+
+# --- GET /api/attendance/analytics ---
+@attendance_bp.route('/api/attendance/analytics', methods=['GET'])
+@auth_required
+def attendance_analytics():
+    data = get_analytics_data(
+        date_from=request.args.get('date_from'),
+        date_to=request.args.get('date_to'),
+        section=request.args.get('section'),
+        branch=request.args.get('branch')
+    )
+    return jsonify(data), 200

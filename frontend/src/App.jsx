@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { lazy, Suspense } from 'react';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -8,6 +9,7 @@ import RegisterStudent from './pages/RegisterStudent';
 import StudentDetail from './pages/StudentDetail';
 import LiveAttendance from './pages/LiveAttendance';
 import AttendanceList from './pages/AttendanceList';
+const Analytics = lazy(() => import('./pages/Analytics'));
 import './index.css';
 
 // --- Protected Route Wrapper (Admin pages only) ---
@@ -56,6 +58,7 @@ function App() {
         <Route path="/students/new" element={<ProtectedRoute><RegisterStudent /></ProtectedRoute>} />
         <Route path="/students/:id" element={<ProtectedRoute><StudentDetail /></ProtectedRoute>} />
         <Route path="/attendance" element={<ProtectedRoute><AttendanceList /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute><Suspense fallback={<div style={{display:'flex',justifyContent:'center',paddingTop:'8rem'}}><div className="spinner"></div></div>}><Analytics /></Suspense></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,8 +1,8 @@
 # --- Attendance Model ---
-# Query functions for attendance records, stats, and filtering.
+# Query functions for attendance records, stats, filtering, and analytics.
 
 from database import get_db
-from datetime import date
+from datetime import date, timedelta
 
 
 def get_attendance_records(filter_date=None, student_id=None, section=None, branch=None,
@@ -49,7 +49,7 @@ def get_today_attendance():
 
 
 def get_attendance_stats():
-    """Get summary statistics: total students, present today, overall attendance %."""
+    """Get summary statistics: total students, present today, today's %, overall %."""
     conn = get_db()
     today = date.today().isoformat()
 
@@ -58,7 +58,13 @@ def get_attendance_stats():
         "SELECT COUNT(*) FROM attendance WHERE date = ?", (today,)
     ).fetchone()[0]
 
-    # --- Overall attendance percentage ---
+    # --- Today's attendance percentage ---
+    if total_students == 0:
+        today_pct = 0.0
+    else:
+        today_pct = round((present_today / total_students) * 100, 1)
+
+    # --- Overall attendance percentage (across all recorded days) ---
     total_days = conn.execute("SELECT COUNT(DISTINCT date) FROM attendance").fetchone()[0]
     if total_days == 0 or total_students == 0:
         overall_pct = 0.0
@@ -70,6 +76,7 @@ def get_attendance_stats():
     return {
         "total_students": total_students,
         "present_today": present_today,
+        "today_percentage": today_pct,
         "overall_percentage": overall_pct,
         "date": today
     }
@@ -84,3 +91,159 @@ def get_student_attendance_history(student_id):
     ).fetchall()
     conn.close()
     return [dict(r) for r in records]
+
+
+def get_analytics_data(date_from=None, date_to=None, section=None, branch=None):
+    """
+    Get comprehensive analytics data for charting.
+    Returns daily trends, per-student rates, section breakdown, and summary stats.
+    """
+    conn = get_db()
+
+    # Default date range: last 30 days
+    if not date_to:
+        date_to = date.today().isoformat()
+    if not date_from:
+        date_from = (date.today() - timedelta(days=30)).isoformat()
+
+    total_students = conn.execute("SELECT COUNT(*) FROM student").fetchone()[0]
+
+    # --- Build student filter ---
+    student_filter = ""
+    student_params = []
+    if section:
+        student_filter += " AND s.section = ?"
+        student_params.append(section)
+    if branch:
+        student_filter += " AND s.branch = ?"
+        student_params.append(branch)
+
+    # --- 1. Daily attendance trend ---
+    daily_query = """
+        SELECT a.date, COUNT(DISTINCT a.student_id) as present_count
+        FROM attendance a
+        JOIN student s ON a.student_id = s.id
+        WHERE a.date >= ? AND a.date <= ?
+    """ + student_filter + """
+        GROUP BY a.date
+        ORDER BY a.date ASC
+    """
+    daily_rows = conn.execute(daily_query, [date_from, date_to] + student_params).fetchall()
+
+    # Get filtered student count for percentage calculation
+    if section or branch:
+        filtered_count_query = "SELECT COUNT(*) FROM student s WHERE 1=1" + student_filter
+        filtered_total = conn.execute(filtered_count_query, student_params).fetchone()[0]
+    else:
+        filtered_total = total_students
+
+    daily_trend = []
+    for row in daily_rows:
+        pct = round((row['present_count'] / filtered_total) * 100, 1) if filtered_total > 0 else 0
+        daily_trend.append({
+            "date": row['date'],
+            "present": row['present_count'],
+            "total": filtered_total,
+            "percentage": pct
+        })
+
+    # --- 2. Per-student attendance rates ---
+    student_query = """
+        SELECT s.id, s.name, s.roll_number, s.section, s.branch,
+               COUNT(a.id) as days_present
+        FROM student s
+        LEFT JOIN attendance a ON s.id = a.student_id
+            AND a.date >= ? AND a.date <= ?
+        WHERE 1=1
+    """ + student_filter.replace("s.", "s.") + """
+        GROUP BY s.id
+        ORDER BY days_present DESC
+    """
+    student_rows = conn.execute(student_query, [date_from, date_to] + student_params).fetchall()
+
+    total_days_in_range = conn.execute(
+        "SELECT COUNT(DISTINCT date) FROM attendance WHERE date >= ? AND date <= ?",
+        (date_from, date_to)
+    ).fetchone()[0]
+
+    student_rates = []
+    for row in student_rows:
+        rate = round((row['days_present'] / total_days_in_range) * 100, 1) if total_days_in_range > 0 else 0
+        student_rates.append({
+            "id": row['id'],
+            "name": row['name'],
+            "roll_number": row['roll_number'],
+            "section": row['section'] or "N/A",
+            "branch": row['branch'] or "N/A",
+            "days_present": row['days_present'],
+            "total_days": total_days_in_range,
+            "rate": min(rate, 100)
+        })
+
+    # --- 3. Section-wise breakdown ---
+    section_query = """
+        SELECT COALESCE(s.section, 'Unassigned') as section_name,
+               COUNT(DISTINCT s.id) as student_count,
+               COUNT(DISTINCT a.id) as total_records
+        FROM student s
+        LEFT JOIN attendance a ON s.id = a.student_id
+            AND a.date >= ? AND a.date <= ?
+        GROUP BY s.section
+        ORDER BY student_count DESC
+    """
+    section_rows = conn.execute(section_query, (date_from, date_to)).fetchall()
+    section_breakdown = [
+        {
+            "section": row['section_name'],
+            "students": row['student_count'],
+            "records": row['total_records']
+        }
+        for row in section_rows
+    ]
+
+    # --- 4. Branch-wise breakdown ---
+    branch_query = """
+        SELECT COALESCE(s.branch, 'Unassigned') as branch_name,
+               COUNT(DISTINCT s.id) as student_count,
+               COUNT(DISTINCT a.id) as total_records
+        FROM student s
+        LEFT JOIN attendance a ON s.id = a.student_id
+            AND a.date >= ? AND a.date <= ?
+        GROUP BY s.branch
+        ORDER BY student_count DESC
+    """
+    branch_rows = conn.execute(branch_query, (date_from, date_to)).fetchall()
+    branch_breakdown = [
+        {
+            "branch": row['branch_name'],
+            "students": row['student_count'],
+            "records": row['total_records']
+        }
+        for row in branch_rows
+    ]
+
+    # --- 5. Summary stats ---
+    if daily_trend:
+        avg_pct = round(sum(d['percentage'] for d in daily_trend) / len(daily_trend), 1)
+        best_day = max(daily_trend, key=lambda d: d['percentage'])
+        worst_day = min(daily_trend, key=lambda d: d['percentage'])
+    else:
+        avg_pct = 0
+        best_day = {"date": "N/A", "percentage": 0}
+        worst_day = {"date": "N/A", "percentage": 0}
+
+    conn.close()
+    return {
+        "date_range": {"from": date_from, "to": date_to},
+        "total_students": filtered_total,
+        "total_days": total_days_in_range,
+        "daily_trend": daily_trend,
+        "student_rates": student_rates,
+        "section_breakdown": section_breakdown,
+        "branch_breakdown": branch_breakdown,
+        "summary": {
+            "average_percentage": avg_pct,
+            "best_day": {"date": best_day['date'], "percentage": best_day['percentage']},
+            "worst_day": {"date": worst_day['date'], "percentage": worst_day['percentage']},
+        }
+    }
