@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, ShieldAlert, ShieldCheck } from 'lucide-react';
 import ProofImageModal from './ProofImageModal';
 
-export default function AttendanceTable({ records, showStudent = true }) {
-  const [proofImage, setProofImage] = useState(null);
+export default function AttendanceTable({ records, showStudent = true, onStatusChange }) {
+  const [proofRecord, setProofRecord] = useState(null);
 
   if (!records || records.length === 0) {
     return (
@@ -13,6 +13,13 @@ export default function AttendanceTable({ records, showStudent = true }) {
       </div>
     );
   }
+
+  const handleStatusToggle = async (record) => {
+    const newStatus = record.status === 'Present' ? 'Absent' : 'Present';
+    if (onStatusChange) {
+      await onStatusChange(record.id, newStatus);
+    }
+  };
 
   return (
     <>
@@ -44,12 +51,27 @@ export default function AttendanceTable({ records, showStudent = true }) {
                     {(record.confidence * 100).toFixed(1)}%
                   </span>
                 </td>
-                <td><span className="badge badge-success">{record.status}</span></td>
+                <td>
+                  {onStatusChange ? (
+                    <button
+                      className={`status-toggle-btn ${record.status === 'Present' ? 'status-present' : 'status-absent'}`}
+                      onClick={() => handleStatusToggle(record)}
+                      title={`Click to mark ${record.status === 'Present' ? 'Absent' : 'Present'}`}
+                    >
+                      {record.status === 'Present' ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+                      {record.status}
+                    </button>
+                  ) : (
+                    <span className={`badge ${record.status === 'Present' ? 'badge-success' : 'badge-danger'}`}>
+                      {record.status}
+                    </span>
+                  )}
+                </td>
                 <td>
                   {record.proof_image_path ? (
                     <div
                       className="proof-thumb"
-                      onClick={() => setProofImage(record.proof_image_path)}
+                      onClick={() => setProofRecord(record)}
                     >
                       <img
                         src={`/${record.proof_image_path}`}
@@ -67,10 +89,11 @@ export default function AttendanceTable({ records, showStudent = true }) {
         </table>
       </div>
 
-      {proofImage && (
+      {proofRecord && (
         <ProofImageModal
-          imagePath={proofImage}
-          onClose={() => setProofImage(null)}
+          record={proofRecord}
+          onClose={() => setProofRecord(null)}
+          onStatusChange={onStatusChange}
         />
       )}
     </>

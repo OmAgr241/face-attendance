@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import AttendanceTable from '../components/AttendanceTable';
+import toast from 'react-hot-toast';
 import { Zap, Plus, Clock, Activity, Users, TrendingUp, BarChart3, Video, ClipboardList, UserPlus, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
@@ -26,6 +27,19 @@ export default function Dashboard() {
       console.error('Dashboard fetch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (recordId, newStatus) => {
+    try {
+      await client.patch(`/attendance/${recordId}/status`, { status: newStatus });
+      toast.success(`Status updated to ${newStatus}`);
+      setTodayRecords(prev => prev.map(r =>
+        r.id === recordId ? { ...r, status: newStatus } : r
+      ));
+    } catch (err) {
+      toast.error('Failed to update status');
+      throw err;
     }
   };
 
@@ -144,7 +158,7 @@ export default function Dashboard() {
             {stats?.date || new Date().toISOString().split('T')[0]}
           </span>
         </div>
-        <AttendanceTable records={todayRecords} />
+        <AttendanceTable records={todayRecords} onStatusChange={handleStatusChange} />
       </div>
 
       {/* Component Specific Styling */}

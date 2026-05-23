@@ -36,6 +36,18 @@ export default function StudentDetail() {
     } finally { setDeleting(false); }
   };
 
+  const handleStatusChange = async (recordId, newStatus) => {
+    try {
+      await client.patch(`/attendance/${recordId}/status`, { status: newStatus });
+      toast.success(`Status updated to ${newStatus}`);
+      // Refresh student data to recalculate attendance
+      fetchStudent();
+    } catch (err) {
+      toast.error('Failed to update status');
+      throw err;
+    }
+  };
+
   const getPctColor = (pct) => {
     if (pct >= 75) return 'var(--success)';
     if (pct >= 50) return 'var(--warning)';
@@ -141,7 +153,7 @@ export default function StudentDetail() {
           <Calendar size={18} color="var(--primary)" />
           <h3>ACCESS LOGS</h3>
         </div>
-        <AttendanceTable records={(student.attendance_history || []).map(r => ({ ...r, name: student.name, roll_number: student.roll_number }))} showStudent={false} />
+        <AttendanceTable records={(student.attendance_history || []).map(r => ({ ...r, name: student.name, roll_number: student.roll_number }))} showStudent={false} onStatusChange={handleStatusChange} />
       </div>
     </div>
   );

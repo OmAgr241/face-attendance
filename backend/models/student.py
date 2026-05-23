@@ -93,6 +93,6 @@ def _calc_attendance_pct(conn, student_id):
     if total_days == 0:
         return 0.0
     present_days = conn.execute(
-        "SELECT COUNT(*) FROM attendance WHERE student_id = ?", (student_id,)
+        "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND status = 'Present'", (student_id,)
     ).fetchone()[0]
     return round((present_days / total_days) * 100, 1)

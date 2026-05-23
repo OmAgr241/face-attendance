@@ -55,7 +55,7 @@ def get_attendance_stats():
 
     total_students = conn.execute("SELECT COUNT(*) FROM student").fetchone()[0]
     present_today = conn.execute(
-        "SELECT COUNT(*) FROM attendance WHERE date = ?", (today,)
+        "SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'Present'", (today,)
     ).fetchone()[0]
 
     # --- Today's attendance percentage ---
@@ -69,7 +69,7 @@ def get_attendance_stats():
     if total_days == 0 or total_students == 0:
         overall_pct = 0.0
     else:
-        total_records = conn.execute("SELECT COUNT(*) FROM attendance").fetchone()[0]
+        total_records = conn.execute("SELECT COUNT(*) FROM attendance WHERE status = 'Present'").fetchone()[0]
         overall_pct = round((total_records / (total_students * total_days)) * 100, 1)
 
     conn.close()
@@ -123,7 +123,7 @@ def get_analytics_data(date_from=None, date_to=None, section=None, branch=None):
         SELECT a.date, COUNT(DISTINCT a.student_id) as present_count
         FROM attendance a
         JOIN student s ON a.student_id = s.id
-        WHERE a.date >= ? AND a.date <= ?
+        WHERE a.date >= ? AND a.date <= ? AND a.status = 'Present'
     """ + student_filter + """
         GROUP BY a.date
         ORDER BY a.date ASC
@@ -150,7 +150,7 @@ def get_analytics_data(date_from=None, date_to=None, section=None, branch=None):
     # --- 2. Per-student attendance rates ---
     student_query = """
         SELECT s.id, s.name, s.roll_number, s.section, s.branch,
-               COUNT(a.id) as days_present
+               COUNT(CASE WHEN a.status = 'Present' THEN 1 END) as days_present
         FROM student s
         LEFT JOIN attendance a ON s.id = a.student_id
             AND a.date >= ? AND a.date <= ?
@@ -247,3 +247,142 @@ def get_analytics_data(date_from=None, date_to=None, section=None, branch=None):
             "worst_day": {"date": worst_day['date'], "percentage": worst_day['percentage']},
         }
     }
+
+
+def update_attendance_status(attendance_id, new_status):
+    """Update the status of an attendance record (Present <-> Absent)."""
+    conn = get_db()
+    cursor = conn.execute(
+        "UPDATE attendance SET status = ? WHERE id = ?",
+        (new_status, attendance_id)
+    )
+    conn.commit()
+    updated = cursor.rowcount > 0
+    conn.close()
+    return updated
+
+
+def get_attendance_for_export(filter_date=None, date_from=None, date_to=None,
+                               section=None, branch=None):
+    """
+    Get daily attendance data for Excel export.
+    Returns ALL registered students; those without attendance records appear as 'Absent'.
+    """
+    conn = get_db()
+
+    # --- Get all students (optionally filtered) ---
+    student_query = "SELECT id, name, roll_number, branch, section FROM student WHERE 1=1"
+    student_params = []
+    if section:
+        student_query += " AND section = ?"
+        student_params.append(section)
+    if branch:
+        student_query += " AND branch = ?"
+        student_params.append(branch)
+    student_query += " ORDER BY name"
+    students = conn.execute(student_query, student_params).fetchall()
+
+    # --- Determine dates to export ---
+    if filter_date:
+        dates = [filter_date]
+    elif date_from and date_to:
+        # Get all distinct attendance dates in range
+        date_rows = conn.execute(
+            "SELECT DISTINCT date FROM attendance WHERE date >= ? AND date <= ? ORDER BY date",
+            (date_from, date_to)
+        ).fetchall()
+        dates = [r['date'] for r in date_rows]
+        if not dates:
+            dates = [date_from]
+    else:
+        dates = [date.today().isoformat()]
+
+    # --- Build export data per date ---
+    export_data = []
+    for d in dates:
+        for s in students:
+            record = conn.execute(
+                "SELECT status, time, confidence FROM attendance WHERE student_id = ? AND date = ?",
+                (s['id'], d)
+            ).fetchone()
+            export_data.append({
+                "date": d,
+                "name": s['name'],
+                "roll_number": s['roll_number'],
+                "branch": s['branch'] or "N/A",
+                "section": s['section'] or "N/A",
+                "status": record['status'] if record else "Absent",
+                "time": record['time'] if record else "-",
+            })
+
+    conn.close()
+    return export_data
+
+
+def get_student_attendance_summary(date_from=None, date_to=None,
+                                    section=None, branch=None,
+                                    min_percentage=None):
+    """
+    Get per-student attendance summary for a period.
+    If min_percentage is set, only return students whose attendance % is BELOW that value.
+    """
+    conn = get_db()
+
+    if not date_to:
+        date_to = date.today().isoformat()
+    if not date_from:
+        date_from = (date.today() - timedelta(days=30)).isoformat()
+
+    # --- Total working days in range ---
+    total_days = conn.execute(
+        "SELECT COUNT(DISTINCT date) FROM attendance WHERE date >= ? AND date <= ?",
+        (date_from, date_to)
+    ).fetchone()[0]
+
+    # --- Student filter ---
+    student_filter = ""
+    student_params = []
+    if section:
+        student_filter += " AND s.section = ?"
+        student_params.append(section)
+    if branch:
+        student_filter += " AND s.branch = ?"
+        student_params.append(branch)
+
+    query = """
+        SELECT s.id, s.name, s.roll_number, s.branch, s.section,
+               COUNT(CASE WHEN a.status = 'Present' THEN 1 END) as days_present
+        FROM student s
+        LEFT JOIN attendance a ON s.id = a.student_id
+            AND a.date >= ? AND a.date <= ?
+        WHERE 1=1
+    """ + student_filter + """
+        GROUP BY s.id
+        ORDER BY s.name
+    """
+    rows = conn.execute(query, [date_from, date_to] + student_params).fetchall()
+
+    results = []
+    for row in rows:
+        if total_days > 0:
+            pct = round((row['days_present'] / total_days) * 100, 1)
+        else:
+            pct = 0.0
+        pct = min(pct, 100.0)
+
+        # --- Filter by min percentage (include students BELOW threshold) ---
+        if min_percentage is not None and pct >= min_percentage:
+            continue
+
+        results.append({
+            "name": row['name'],
+            "roll_number": row['roll_number'],
+            "branch": row['branch'] or "N/A",
+            "section": row['section'] or "N/A",
+            "days_present": row['days_present'],
+            "total_days": total_days,
+            "percentage": pct,
+        })
+
+    conn.close()
+    return results

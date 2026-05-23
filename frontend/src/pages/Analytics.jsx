@@ -7,8 +7,10 @@ import {
 } from 'recharts';
 import {
   TrendingUp, Users, Calendar, Filter, BarChart3,
-  ArrowLeft, Award, AlertTriangle, ChevronDown
+  ArrowLeft, Award, AlertTriangle, ChevronDown,
+  Download, FileSpreadsheet
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const CHART_COLORS = ['#ff5722', '#ff7a00', '#ff9800', '#ffc107', '#8bc34a', '#4caf50', '#00bcd4', '#2196f3', '#673ab7', '#e91e63'];
 
@@ -22,6 +24,8 @@ export default function Analytics() {
   const [sections, setSections] = useState([]);
   const [branches, setBranches] = useState([]);
   const [activeChart, setActiveChart] = useState('trend');
+  const [analyticsMinPct, setAnalyticsMinPct] = useState('');
+  const [downloading, setDownloading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -62,6 +66,35 @@ export default function Analytics() {
       console.error('Analytics fetch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    setDownloading(true);
+    try {
+      const query = new URLSearchParams();
+      if (dateFrom) query.set('date_from', dateFrom);
+      if (dateTo) query.set('date_to', dateTo);
+      if (section) query.set('section', section);
+      if (branch) query.set('branch', branch);
+      if (analyticsMinPct) query.set('min_percentage', analyticsMinPct);
+      const res = await client.get(`/attendance/export/summary?${query.toString()}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `attendance_report_${dateFrom || 'all'}_to_${dateTo || 'now'}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Report downloaded');
+    } catch (err) {
+      toast.error('Download failed');
+      console.error('Download error:', err);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -346,7 +379,32 @@ export default function Analytics() {
       {/* Full Student Table */}
       {students.length > 0 && (
         <div className="glass-card" style={{ marginTop: 'var(--space-xl)' }}>
-          <h3 className="chart-title" style={{ marginBottom: 'var(--space-lg)' }}>Student Attendance Details</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', gap: '1rem' }}>
+            <h3 className="chart-title" style={{ marginBottom: 0 }}>Student Attendance Details</h3>
+            <div className="export-actions">
+              <div className="min-pct-input">
+                <label>MIN %</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="e.g., 75"
+                  value={analyticsMinPct}
+                  onChange={(e) => setAnalyticsMinPct(e.target.value)}
+                  min="0"
+                  max="100"
+                  style={{ width: '90px', padding: '0.45rem 0.6rem', fontSize: 'var(--font-sm)' }}
+                />
+              </div>
+              <button
+                className="btn btn-success btn-sm"
+                onClick={handleDownloadReport}
+                disabled={downloading}
+              >
+                <Download size={14} />
+                {downloading ? 'DOWNLOADING...' : 'DOWNLOAD REPORT'}
+              </button>
+            </div>
+          </div>
           <div className="table-container">
             <table className="data-table">
               <thead>
