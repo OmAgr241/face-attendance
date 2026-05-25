@@ -1,6 +1,9 @@
 # --- Camera Service ---
-# Manages camera capture, face recognition loop, annotation, and MJPEG streaming.
-# Runs recognition in a daemon thread so it doesn't block Flask.
+# Manages camera capture, face recognition, annotation, and MJPEG streaming.
+# Uses a two-thread architecture:
+#   1. Capture thread  — fast loop: reads frames, draws cached boxes, encodes JPEG
+#   2. Recognition thread — slow loop: runs face detection/matching asynchronously
+# This prevents the heavy recognition work from freezing the live stream.
 
 import cv2
 import threading
@@ -17,12 +20,17 @@ from services.face_service import detect_faces_in_frame, match_face, load_all_en
 from services.attendance_service import mark_attendance
 
 
+# --- Cooldown for unknown face events (seconds) ---
+UNKNOWN_COOLDOWN_SECONDS = 5
+
+
 class CameraService:
     """Singleton-style camera service for live face recognition and MJPEG streaming."""
 
     def __init__(self):
         self._cap = None
-        self._thread = None
+        self._capture_thread = None
+        self._recog_thread = None
         self._running = False
         self._camera_index = 0
         self._lock = threading.Lock()
@@ -33,6 +41,13 @@ class CameraService:
         self._recent_events = []            # Last N recognition events for live log
         self._student_name_cache = {}       # Cache student names to avoid repeated DB calls
         self._error_count = 0               # Track consecutive errors
+        self._last_unknown_time = 0         # Cooldown tracker for unknown face events
+
+        # --- Two-thread architecture state ---
+        self._latest_raw_frame = None       # Latest raw frame for recognition thread to pick up
+        self._raw_frame_lock = threading.Lock()
+        self._cached_face_results = []      # Cached: list of (top, right, bottom, left, label, color)
+        self._cached_faces_lock = threading.Lock()
 
     # --- Public API ---
 
@@ -58,27 +73,40 @@ class CameraService:
         self._recent_events = []
         self._student_name_cache = {}
         self._error_count = 0
+        self._last_unknown_time = 0
+        self._cached_face_results = []
+        self._latest_raw_frame = None
 
         # --- Load all known face encodings ---
         self._known_encodings = load_all_encodings()
 
-        # --- Start daemon thread ---
-        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self._thread.start()
-        print(f"[CAMERA] Started on index {camera_index}")
+        # --- Start capture thread (fast — just reads frames and draws cached boxes) ---
+        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._capture_thread.start()
+
+        # --- Start recognition thread (slow — runs face detection/matching) ---
+        self._recog_thread = threading.Thread(target=self._recognition_loop, daemon=True)
+        self._recog_thread.start()
+
+        print(f"[CAMERA] Started on index {camera_index} (2-thread mode)")
 
     def stop(self):
         """Stop the camera and release resources."""
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=3)
-            self._thread = None
+        if self._capture_thread:
+            self._capture_thread.join(timeout=3)
+            self._capture_thread = None
+        if self._recog_thread:
+            self._recog_thread.join(timeout=5)
+            self._recog_thread = None
         if self._cap:
             self._cap.release()
             self._cap = None
         with self._lock:
             self._marked_today.clear()
         self._current_frame = None
+        self._cached_face_results = []
+        self._latest_raw_frame = None
         self._student_name_cache = {}
         print("[CAMERA] Stopped")
 
@@ -139,14 +167,15 @@ class CameraService:
                 pass
         return cameras
 
-    # --- Private: Capture Loop ---
+    # =============================================
+    # Thread 1: CAPTURE LOOP (fast, ~15 FPS)
+    # Reads frames, draws cached bounding boxes,
+    # encodes JPEG for streaming. Never blocks.
+    # =============================================
 
     def _capture_loop(self):
-        """Main loop: capture frames, detect faces, annotate, and stream."""
+        """Fast loop: read frames, draw cached boxes, encode JPEG."""
         frame_interval = 1.0 / STREAM_FPS_LIMIT
-        # --- Process recognition every N frames to keep stream smooth ---
-        frame_count = 0
-        recognition_interval = 3  # Run recognition every 3rd frame
 
         while self._running:
             loop_start = time.time()
@@ -163,24 +192,33 @@ class CameraService:
                     continue
 
                 self._error_count = 0
-                frame_count += 1
 
-                # --- Keep a clean copy for proof images ---
-                raw_frame = frame.copy()
+                # --- Provide latest frame to recognition thread ---
+                with self._raw_frame_lock:
+                    self._latest_raw_frame = frame.copy()
+
+                # --- Draw cached face results on EVERY frame ---
                 annotated = frame.copy()
+                with self._cached_faces_lock:
+                    cached = list(self._cached_face_results)
 
-                # --- Run recognition only every Nth frame for performance ---
-                if frame_count % recognition_interval == 0:
-                    try:
-                        faces = detect_faces_in_frame(frame)
-                        for (top, right, bottom, left), encoding in faces:
-                            self._process_face(
-                                annotated, raw_frame,
-                                top, right, bottom, left, encoding
-                            )
-                    except Exception as e:
-                        # --- Don't let recognition errors kill the stream ---
-                        print(f"[CAMERA] Recognition error (non-fatal): {e}")
+                for (top, right, bottom, left, label, color) in cached:
+                    # --- Draw bounding box ---
+                    cv2.rectangle(annotated, (left, top), (right, bottom), color, 2)
+                    # --- Draw label background ---
+                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
+                    cv2.rectangle(
+                        annotated,
+                        (left, top - label_size[1] - 10),
+                        (left + label_size[0] + 6, top),
+                        color, -1
+                    )
+                    # --- Draw label text ---
+                    cv2.putText(
+                        annotated, label,
+                        (left + 3, top - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1
+                    )
 
                 # --- Encode frame as JPEG ---
                 _, jpeg = cv2.imencode(
@@ -203,8 +241,56 @@ class CameraService:
 
         print("[CAMERA] Capture loop ended")
 
-    def _process_face(self, annotated, raw_frame, top, right, bottom, left, encoding):
-        """Process a single detected face: match, mark attendance, annotate."""
+    # =============================================
+    # Thread 2: RECOGNITION LOOP (slow, ~2-5 FPS)
+    # Grabs the latest frame, runs face detection
+    # and matching, then updates cached results.
+    # Runs independently so the stream stays smooth.
+    # =============================================
+
+    def _recognition_loop(self):
+        """Slow loop: detect faces, match, mark attendance, update cached results."""
+        print("[CAMERA] Recognition thread started")
+
+        while self._running:
+            try:
+                # --- Grab latest frame ---
+                with self._raw_frame_lock:
+                    frame = self._latest_raw_frame
+                    self._latest_raw_frame = None  # consume it
+
+                if frame is None:
+                    time.sleep(0.05)
+                    continue
+
+                raw_frame = frame.copy()
+
+                # --- Run face detection + encoding (the slow part) ---
+                faces = detect_faces_in_frame(frame)
+
+                # --- Build new face results ---
+                new_results = []
+                for (top, right, bottom, left), encoding in faces:
+                    label, color = self._process_face(raw_frame, top, right, bottom, left, encoding)
+                    new_results.append((top, right, bottom, left, label, color))
+
+                # --- Atomically update cached results ---
+                with self._cached_faces_lock:
+                    self._cached_face_results = new_results
+
+            except Exception as e:
+                print(f"[CAMERA] Recognition error (non-fatal): {e}")
+                traceback.print_exc()
+                time.sleep(0.2)
+                continue
+
+            # --- Small sleep to avoid spinning too fast ---
+            time.sleep(0.1)
+
+        print("[CAMERA] Recognition loop ended")
+
+    def _process_face(self, raw_frame, top, right, bottom, left, encoding):
+        """Process a single detected face: match, mark attendance. Returns (label, color)."""
         result = match_face(encoding, self._known_encodings)
 
         if result:
@@ -215,7 +301,7 @@ class CameraService:
                 already_marked = student_id in self._marked_today
 
             if already_marked:
-                # --- Blue box: already marked ---
+                # --- Orange box: already marked ---
                 color = (255, 165, 0)
                 label = f"{student_name} - Already Marked"
             else:
@@ -239,21 +325,13 @@ class CameraService:
             # --- Red box: unknown ---
             color = (0, 0, 255)
             label = "Unknown"
+            # --- Report unknown face event with cooldown ---
+            now = time.time()
+            if now - self._last_unknown_time > UNKNOWN_COOLDOWN_SECONDS:
+                self._last_unknown_time = now
+                self._add_event("Unknown Person", 0, event_type="unknown")
 
-        # --- Draw bounding box and label ---
-        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2)
-        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
-        cv2.rectangle(
-            annotated,
-            (left, top - label_size[1] - 10),
-            (left + label_size[0] + 6, top),
-            color, -1
-        )
-        cv2.putText(
-            annotated, label,
-            (left + 3, top - 5),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1
-        )
+        return label, color
 
     def _get_student_name(self, student_id):
         """Fetch student name from DB with caching."""
@@ -266,12 +344,13 @@ class CameraService:
         self._student_name_cache[student_id] = name
         return name
 
-    def _add_event(self, name, confidence):
+    def _add_event(self, name, confidence, event_type="recognized"):
         """Add a recognition event to the recent events list."""
         event = {
             "name": name,
             "confidence": round(confidence * 100, 1),
-            "timestamp": datetime.now().strftime("%H:%M:%S")
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "type": event_type
         }
         self._recent_events.append(event)
         if len(self._recent_events) > 20:

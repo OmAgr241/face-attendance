@@ -1,0 +1,4 @@
+currently this is teacher specific, teacher will run this on his own laptop put near class enterence
+update - he can create class groups add completely different or same set of students for class group, he can name class groups as periods,
+	 attendance can be taken for each class group if a student is on multiple class group his attendance can be marked each time,
+	 he can also make presets of class groups day wise, like on Monday he has to teach X,Y,Z class group and on Tuesday he has to teach  	 Y,Z,K etc. he can select which class group attendance to take while on camera page, and it will not mark attendance for other class 	 groups. there will be a dropdown menu to select class group based on day.
