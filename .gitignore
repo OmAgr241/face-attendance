@@ -27,3 +27,10 @@ backend/storage/
 
 # Logs
 *.log
+
+# Local tooling
+.understand-anything/
+
+# PPT assets (generated images)
+ppt_assets/
+*.pptx
